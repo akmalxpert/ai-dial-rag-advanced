@@ -1,35 +1,54 @@
-import json
-
 import requests
 
 DIAL_EMBEDDINGS = 'https://ai-proxy.lab.epam.com/openai/deployments/{model}/embeddings'
 
 
-#TODO:
-# ---
-# https://dialx.ai/dial_api#operation/sendEmbeddingsRequest
-# ---
-# Implement DialEmbeddingsClient:
-# - constructor should apply deployment name and api key
-# - create method `get_embeddings` that will generate embeddings for input list (don't forget about dimensions)
-#   with Embedding model and return back a dict with indexed embeddings (key is index from input list and value vector list)
-
 class DialEmbeddingsClient:
-    ...
+    _deployment_name: str
+    _api_key: str
 
+    def __init__(self, deployment_name: str, api_key: str):
+        if not api_key or api_key.strip() == "":
+            raise ValueError("API key cannot be null or empty")
+        self._deployment_name = deployment_name
+        self._api_key = api_key
 
-# Hint:
-#  Response JSON:
-#  {
-#     "data": [
-#         {
-#             "embedding": [
-#                 0.19686688482761383,
-#                 ...
-#             ],
-#             "index": 0,
-#             "object": "embedding"
-#         }
-#     ],
-#     ...
-#  }
+    def get_embeddings(
+            self, inputs: str | list[str],
+            dimensions: int,
+            print_request: bool = True,
+            print_response: bool = False
+    ) -> dict[int, list[float]]:
+        if print_request:
+            print(f"Searching similarities for `{inputs}` \nAnd such dimensions: {dimensions}\n📋Results:\n")
+
+        headers = {
+            "api-key": self._api_key,
+            "Content-Type": "application/json"
+        }
+
+        request_data = {
+            'input': inputs,
+            'dimensions': dimensions,
+        }
+
+        response = requests.post(
+            url=DIAL_EMBEDDINGS.format(model=self._deployment_name),
+            headers=headers,
+            json=request_data,
+            timeout=60
+        )
+
+        if print_response:
+            print("\n" + "=" * 50 + " RESPONSE" + "=" * 50)
+            print(str(response.status_code) + ": " + response.text)
+
+        if response.status_code != 200:
+            raise Exception(f"HTTP {response.status_code}: {response.text}")
+
+        response_json = response.json()
+        data = response_json.get('data', [])
+        return self._from_data(data)
+
+    def _from_data(self, data: list[dict]) -> dict[int, list[float]]:
+        return {embedding_obj['index']: embedding_obj['embedding'] for embedding_obj in data}
